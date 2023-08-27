@@ -1,7 +1,11 @@
 package com.example.exam_communication_without_internet
 
+import android.Manifest
+import android.content.pm.PackageManager
 import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
+import android.widget.Toast
+import androidx.annotation.CallSuper
 import com.example.exam_communication_without_internet.databinding.ActivityMainBinding
 import com.google.android.gms.nearby.Nearby
 import com.google.android.gms.nearby.connection.ConnectionsClient
@@ -60,5 +64,36 @@ class MainActivity : AppCompatActivity() {
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
         connectionsClient = Nearby.getConnectionsClient(this)
+    }
+
+    @CallSuper
+    override fun onStart() {
+        super.onStart()
+        if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) !=  PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(
+                arrayOf(Manifest.permission.ACCESS_FINE_LOCATION),
+                REQUEST_CODE_REQUIRED_PERMISSIONS
+            )
+        }
+    }
+
+    @CallSuper
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        val errMsg = "Cannot start without required permissions"
+        if (requestCode == REQUEST_CODE_REQUIRED_PERMISSIONS) {
+            grantResults.forEach {
+                if (it == PackageManager.PERMISSION_DENIED) {
+                    Toast.makeText(this, errMsg, Toast.LENGTH_SHORT).show()
+                    finish()
+                    return
+                }
+            }
+            recreate()
+        }
     }
 }
