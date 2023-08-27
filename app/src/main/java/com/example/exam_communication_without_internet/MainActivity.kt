@@ -9,7 +9,11 @@ import androidx.annotation.CallSuper
 import com.example.exam_communication_without_internet.databinding.ActivityMainBinding
 import com.google.android.gms.nearby.Nearby
 import com.google.android.gms.nearby.connection.ConnectionsClient
+import com.google.android.gms.nearby.connection.Payload
+import com.google.android.gms.nearby.connection.PayloadCallback
+import com.google.android.gms.nearby.connection.PayloadTransferUpdate
 import com.google.android.gms.nearby.connection.Strategy
+import java.nio.charset.StandardCharsets.UTF_8
 import java.util.Random
 
 class MainActivity : AppCompatActivity() {
@@ -59,6 +63,40 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
 
+    private val payloadCallback: PayloadCallback = object: PayloadCallback() {
+
+        override fun onPayloadReceived(endpointId: String, payload: Payload) {
+            payload.asBytes()?.let {
+                opponentChoice = GameChoice.valueOf(String(it, UTF_8))
+            }
+        }
+
+        override fun onPayloadTransferUpdate(endpointId: String, update: PayloadTransferUpdate) {
+            if (update.status == PayloadTransferUpdate.Status.SUCCESS
+                && myChoice != null && opponentChoice != null) {
+                val mc = myChoice!!
+                val oc = opponentChoice!!
+                when {
+                    mc.beats(oc) -> { // Win
+                        binding.status.text = "${mc.name} beats ${oc.name}"
+                        myScore++
+                    }
+                    mc == oc -> { // Tie
+                        binding.status.text = "You both chose ${mc.name}"
+                    }
+                    else -> { // Loss
+                        binding.status.text = "${mc.name} loses to ${oc.name}"
+                        opponentScore++
+                    }
+                }
+                binding.score.text = "$myScore : $opponentScore"
+                myChoice = null
+                opponentChoice = null
+                setGameControllerEnabled(true)
+            }
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
@@ -94,6 +132,21 @@ class MainActivity : AppCompatActivity() {
                 }
             }
             recreate()
+        }
+    }
+
+    private fun sendGameChoice(choice: GameChoice) {
+        myChoice = choice
+        connectionsClient.sendPayload(opponentEndpointId!!, Payload.fromBytes(choice.name.toByteArray(UTF_8)))
+        binding.status.text = "You chose ${choice.name}"
+        setGameControllerEnabled(false)
+    }
+
+    private fun setGameControllerEnabled(state: Boolean) {
+        binding.apply {
+            scissors.isEnabled = state
+            paper.isEnabled = state
+            rock.isEnabled = state
         }
     }
 }
