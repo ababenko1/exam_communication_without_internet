@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.pm.PackageManager
 import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
+import android.util.Log
 import android.widget.Toast
 import androidx.annotation.CallSuper
 import androidx.core.view.isVisible
@@ -14,6 +15,9 @@ import com.google.android.gms.nearby.connection.ConnectionInfo
 import com.google.android.gms.nearby.connection.ConnectionLifecycleCallback
 import com.google.android.gms.nearby.connection.ConnectionResolution
 import com.google.android.gms.nearby.connection.ConnectionsClient
+import com.google.android.gms.nearby.connection.DiscoveredEndpointInfo
+import com.google.android.gms.nearby.connection.DiscoveryOptions
+import com.google.android.gms.nearby.connection.EndpointDiscoveryCallback
 import com.google.android.gms.nearby.connection.Payload
 import com.google.android.gms.nearby.connection.PayloadCallback
 import com.google.android.gms.nearby.connection.PayloadTransferUpdate
@@ -62,7 +66,7 @@ class MainActivity : AppCompatActivity() {
     private var opponentScore = 0
     private var opponentChoice: GameChoice? = null
 
-    private var myName: String? = null
+    private var myName: String = CodenameGenerator.generate()
     private var myScore = 0
     private var myChoice: GameChoice? = null
 
@@ -142,17 +146,55 @@ class MainActivity : AppCompatActivity() {
         binding.score.text = ":"
     }
 
+    private val endpointDiscoveryCallback = object: EndpointDiscoveryCallback() {
+        override fun onEndpointFound(endpointId: String, info: DiscoveredEndpointInfo) {
+            connectionsClient.requestConnection(myName, endpointId, connectionLifecycleCallback)
+        }
+
+        override fun onEndpointLost(endpointId: String) {
+            Log.WARN
+        }
+    }
+
+    private fun startDiscovery(){
+        val options = DiscoveryOptions.Builder().setStrategy(STRATEGY).build()
+        connectionsClient.startDiscovery(packageName,endpointDiscoveryCallback,options)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
         connectionsClient = Nearby.getConnectionsClient(this)
+
+        binding.myName.text = "You\n($myName)"
+        binding.findOpponent.setOnClickListener {
+            startAdvertising()
+            startDiscovery()
+            binding.status.text = "Searching for opponents..."
+            // "find opponents" is the opposite of "disconnect" so they don't both need to be
+            // visible at the same time
+            binding.findOpponent.isVisible = false
+            binding.disconnect.isVisible = true
+        }
+        // wire the controller buttons
+        binding.apply {
+            rock.setOnClickListener { sendGameChoice(GameChoice.ROCK) }
+            paper.setOnClickListener { sendGameChoice(GameChoice.PAPER) }
+            scissors.setOnClickListener { sendGameChoice(GameChoice.SCISSORS) }
+        }
+        binding.disconnect.setOnClickListener {
+            opponentEndpointId?.let { connectionsClient.disconnectFromEndpoint(it) }
+            resetGame()
+        }
+
+        resetGame()
     }
 
     private fun startAdvertising() {
         val options = AdvertisingOptions.Builder().setStrategy(STRATEGY).build()
         connectionsClient.startAdvertising(
-              myName!!,
+              myName,
               packageName,
               connectionLifecycleCallback,
               options
@@ -168,6 +210,17 @@ class MainActivity : AppCompatActivity() {
                 REQUEST_CODE_REQUIRED_PERMISSIONS
             )
         }
+    }
+
+    @CallSuper
+    override fun onStop(){
+        connectionsClient.apply {
+            stopAdvertising()
+            stopDiscovery()
+            stopAllEndpoints()
+        }
+        resetGame()
+        super.onStop()
     }
 
     @CallSuper
