@@ -6,8 +6,13 @@ import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
 import android.widget.Toast
 import androidx.annotation.CallSuper
+import androidx.core.view.isVisible
 import com.example.exam_communication_without_internet.databinding.ActivityMainBinding
 import com.google.android.gms.nearby.Nearby
+import com.google.android.gms.nearby.connection.AdvertisingOptions
+import com.google.android.gms.nearby.connection.ConnectionInfo
+import com.google.android.gms.nearby.connection.ConnectionLifecycleCallback
+import com.google.android.gms.nearby.connection.ConnectionResolution
 import com.google.android.gms.nearby.connection.ConnectionsClient
 import com.google.android.gms.nearby.connection.Payload
 import com.google.android.gms.nearby.connection.PayloadCallback
@@ -97,11 +102,61 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // Callbacks for connections to other devices
+    private val connectionLifecycleCallback = object: ConnectionLifecycleCallback() {
+        override fun onConnectionInitiated(endpointId: String, info: ConnectionInfo) {
+            connectionsClient.acceptConnection(endpointId, payloadCallback)
+            opponentName = "Opponent\n(${info.endpointName})"
+        }
+
+        override fun onConnectionResult(endpointId: String, result: ConnectionResolution) {
+            if (result.status.isSuccess) {
+                connectionsClient.stopAdvertising()
+                connectionsClient.stopDiscovery()
+                opponentEndpointId = endpointId
+                binding.opponentName.text = opponentName
+                binding.status.text = "Connected"
+                setGameControllerEnabled(true)
+            }
+        }
+
+        override fun onDisconnected(endpointId: String) {
+                resetGame()
+        }
+    }
+
+    private fun resetGame() {
+        opponentEndpointId = null
+        opponentChoice = null
+        opponentName = null
+        opponentScore = 0
+
+        myChoice = null
+        myScore = 0
+
+        binding.disconnect.isVisible = false
+        binding.findOpponent.isVisible = true
+        setGameControllerEnabled(false)
+        binding.opponentName.text="opponent\n(none yet)"
+        binding.status.text ="..."
+        binding.score.text = ":"
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
         connectionsClient = Nearby.getConnectionsClient(this)
+    }
+
+    private fun startAdvertising() {
+        val options = AdvertisingOptions.Builder().setStrategy(STRATEGY).build()
+        connectionsClient.startAdvertising(
+              myName!!,
+              packageName,
+              connectionLifecycleCallback,
+              options
+        )
     }
 
     @CallSuper
